@@ -25,7 +25,7 @@ def contains_penalized_word(mention_text, penalized_set):
     return any(tok in penalized_set for tok in tokens)
 
 penalized_pronouns = set([
-    "person", "people"
+    "person", "people", "The"
 ])
 
 def custom_tokenize(text):

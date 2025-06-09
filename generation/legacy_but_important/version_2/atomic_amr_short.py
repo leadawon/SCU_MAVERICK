@@ -28,7 +28,7 @@ def fix_seed(seed=42):
 fix_seed(42)
 
 # ===== 전역 설정 =====
-os.environ["CUDA_VISIBLE_DEVICES"] = "1"
+
 spacy_o = spacy.load("en_core_web_sm")
 
 GENERIC_TERMS = [
@@ -45,10 +45,12 @@ RELATED_PREDS = {
 }
 
 # ===== 모델 로드 =====
-DIR_STOG_MODEL = '../model_parse_xfm_bart_large-v0_1_0'
-DIR_GTOS_MODEL = '../model_generate_t5wtense-v0_1_0'
-stog = amrlib.load_stog_model(DIR_STOG_MODEL)
-gtos = amrlib.load_gtos_model(DIR_GTOS_MODEL)
+def load_models(model_base_dir):
+    dir_stog = os.path.join(model_base_dir, 'model_parse_xfm_bart_large-v0_1_0')
+    dir_gtos = os.path.join(model_base_dir, 'model_generate_t5wtense-v0_1_0')
+    stog_model = amrlib.load_stog_model(dir_stog)
+    gtos_model = amrlib.load_gtos_model(dir_gtos)
+    return stog_model, gtos_model
 
 # ===== 유틸 함수 =====
 def gstring_to_oneline(gstring):
@@ -115,11 +117,12 @@ def get_subgraphs_relation_aware(amr_graph):
             if t[0] == target or t[2] == target:
                 subgraph_triples.append(t)
 
+    print(subgraph_triples)
     subgraph_triples = list(OrderedDict.fromkeys(subgraph_triples))
     return [penman.format(penman.configure(Graph(subgraph_triples)))]
 
 # ===== 메인 처리 함수 =====
-def process_summary(summary: str):
+def process_summary(summary: str, stog, gtos):
     sentences = [s.text for s in spacy_o(summary).sents]
     graphs = stog.parse_sents(sentences, add_metadata=True)
     graph_tags = [''] * len(graphs)

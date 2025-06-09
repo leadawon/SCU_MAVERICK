@@ -1,2 +1,3 @@
-이버전은 cause-01을 catch하는 코드를 적용한 후후 코드입니다. coref붙은거는 직접 실행시켜서 예문의 atomic fact를 반환하고 안붙은거는 코딩 안했습니다.
+이버전은 cause-01을 catch하는 코드를 적용한 후후 코드입니다. coref붙은거는 직접 실행시켜서 예문의 atomic fact를 반환하고 안붙는거는 lib입니다.
 RELATED_ROLES와 RELATED_PREDS를 확장했습니다. 하지만 She stayed home because she was sick.이 She stayed home sick.으로 추출되는 문제가 있습니다.
+이거 xsum으로 돌려보면 amr graph가 두개가 나와서 에러뜹니다. 다음 버전에서 이건 고칩니다.
