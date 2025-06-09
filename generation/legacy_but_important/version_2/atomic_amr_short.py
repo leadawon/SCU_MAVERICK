@@ -1,6 +1,5 @@
 import sys
-sys.path.append('/workspace/SCU_MAVERICK')
-
+import os
 import random
 import numpy as np
 import torch
@@ -28,16 +27,30 @@ def fix_seed(seed=42):
 
 fix_seed(42)
 
-# Load spaCy for sentence tokenization
+# ===== 전역 설정 =====
+os.environ["CUDA_VISIBLE_DEVICES"] = "1"
 spacy_o = spacy.load("en_core_web_sm")
 
-# 모델 로드 (전역)
+GENERIC_TERMS = [
+    "person", "people", "man", "woman", "individual",
+    "thing", "the thing", "something", "object", "item", "entity",
+    "event", "situation", "place", "location", "area",
+    "group", "organization", "he", "she", "his", "her", "they", "them", "their"
+]
+
+RELATED_ROLES = {":cause", ":purpose", ":time", ":reason", ":because-of", ":result"}
+RELATED_PREDS = {
+    "cause-01", "result-01", "purpose-01", "goal-01", "aim-01", "reason-01",
+    "time-entity", "before", "after", "explain-01", "lead-01", "intend-01"
+}
+
+# ===== 모델 로드 =====
 DIR_STOG_MODEL = '../model_parse_xfm_bart_large-v0_1_0'
 DIR_GTOS_MODEL = '../model_generate_t5wtense-v0_1_0'
 stog = amrlib.load_stog_model(DIR_STOG_MODEL)
 gtos = amrlib.load_gtos_model(DIR_GTOS_MODEL)
 
-# AMR 후처리 함수들
+# ===== 유틸 함수 =====
 def gstring_to_oneline(gstring):
     graph_lines = [line.strip() for line in gstring.splitlines() if not line.startswith('#')]
     gstring = ' '.join(graph_lines)
@@ -58,23 +71,34 @@ def replace_graph_with_tags(dict_tag, graph):
         graph = graph.replace(key, value)
     return graph
 
+def replace_general_terms_with_specific(original_text: str, atomic_sentence: str) -> str:
+    SEP = " | | | "
+    combined_text = f"{original_text.strip()}{SEP}{atomic_sentence.strip()}"
+    resolved_combined = resolve_coreferences(combined_text)
+    if SEP in resolved_combined:
+        return resolved_combined.split(SEP)[-1].strip()
+    else:
+        return resolved_combined.strip()
+
 def get_subgraphs_relation_aware(amr_graph):
     g = penman.decode(amr_graph, model=amr.model)
     root = g.triples[0][0]
     root_triples = [t for t in g.triples if t[0] == root]
 
-    related_roles = {":purpose", ":cause", ":time"}
-    related_preds = {"cause-01", "purpose-01", "time-entity", "before", "after"}
-
     subgraph_triples = list(root_triples)
     related_targets = set()
 
     for t in root_triples:
-        if t[1] in related_roles:
+        if t[1] in RELATED_ROLES:
             related_targets.add(t[2])
             subgraph_triples.append(t)
 
-    predicate_nodes = {subj for subj, role, obj in g.triples if role == ":instance" and obj in related_preds}
+    predicate_nodes = set()
+    for t in g.triples:
+        subj, role, obj = t
+        if role == ":instance" and obj in RELATED_PREDS:
+            predicate_nodes.add(subj)
+
     related_targets.update(predicate_nodes)
 
     for t in root_triples:
@@ -94,15 +118,7 @@ def get_subgraphs_relation_aware(amr_graph):
     subgraph_triples = list(OrderedDict.fromkeys(subgraph_triples))
     return [penman.format(penman.configure(Graph(subgraph_triples)))]
 
-def replace_general_terms_with_specific(original_text: str, atomic_sentence: str) -> str:
-    SEP = " | | | "
-    combined_text = f"{original_text.strip()}{SEP}{atomic_sentence.strip()}"
-    resolved_combined = resolve_coreferences(combined_text)
-    if SEP in resolved_combined:
-        return resolved_combined.split(SEP)[-1].strip()
-    else:
-        return resolved_combined.strip()
-
+# ===== 메인 처리 함수 =====
 def process_summary(summary: str):
     sentences = [s.text for s in spacy_o(summary).sents]
     graphs = stog.parse_sents(sentences, add_metadata=True)
@@ -113,7 +129,10 @@ def process_summary(summary: str):
         g_penman = penman.decode(g, model=amr.model)
         root = g_penman.triples[0][0]
         root_triples = [t for t in g_penman.triples if t[0] == root]
-        if not any(t[1] in {":purpose", ":cause", ":time"} for t in root_triples):
+        contains_predicate = any(
+            t[1] == ":instance" and t[2] in RELATED_PREDS for t in g_penman.triples
+        )
+        if not any(t[1] in RELATED_ROLES for t in root_triples) and not contains_predicate:
             continue
 
         dict_tag = get_concepts(g_tag)

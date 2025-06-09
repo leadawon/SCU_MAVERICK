@@ -40,13 +40,6 @@ GENERIC_TERMS = [
     "group", "organization","he", "she", "his", "her", "they", "them", "their"
 ]
 
-RELATED_ROLES = {":cause", ":purpose", ":time", ":reason", ":because-of", ":result"}
-
-RELATED_PREDS = {
-        "cause-01", "result-01", "purpose-01", "goal-01", "aim-01", "reason-01",
-        "time-entity", "before", "after", "explain-01", "lead-01", "intend-01"
-    }
-
 
 def replace_general_terms_with_specific(original_text: str, atomic_sentence: str) -> str:
     SEP = " | | | "
@@ -104,11 +97,9 @@ def process_summary(summary: str):
         g_penman = penman.decode(g, model=amr.model)
         root = g_penman.triples[0][0]
         root_triples = [t for t in g_penman.triples if t[0] == root]
-        contains_predicate = any(
-            t[1] == ":instance" and t[2] in RELATED_PREDS for t in g_penman.triples
-        )
-        if not any(t[1] in RELATED_ROLES for t in root_triples) and not contains_predicate:
-            print(f"-> Skipped (no relevant semantic role or predicate)")
+        related_roles = {":purpose", ":cause", ":time"}
+        if not any(t[1] in related_roles for t in root_triples):
+            print(f"-> Skipped (no relevant semantic role like :cause, :purpose, :time)")
             continue
 
         dict_tag = get_concepts(g_tag)
@@ -146,14 +137,15 @@ def get_subgraphs_relation_aware(amr_graph):
     root_triples = [t for t in g.triples if t[0] == root]
 
     # 관심 있는 semantic role 및 predicate 정의
-
+    related_roles = {":purpose", ":cause", ":time"}
+    related_preds = {"cause-01", "purpose-01", "time-entity", "before", "after"}
 
     subgraph_triples = list(root_triples)
     related_targets = set()
 
     # 1. Role 기반 대상 찾기 (루트 기준)
     for t in root_triples:
-        if t[1] in RELATED_ROLES:
+        if t[1] in related_roles:
             related_targets.add(t[2])
             subgraph_triples.append(t)
 
@@ -161,7 +153,7 @@ def get_subgraphs_relation_aware(amr_graph):
     predicate_nodes = set()
     for t in g.triples:
         subj, role, obj = t
-        if role == ":instance" and obj in RELATED_PREDS:
+        if role == ":instance" and obj in related_preds:
             predicate_nodes.add(subj)
 
     related_targets.update(predicate_nodes)
